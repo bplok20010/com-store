@@ -29,6 +29,7 @@ export interface ConsumerProps<T = {}> {
 
 interface ProviderProps<T> {
 	initialValue?: T;
+	setup?: (opts: { state: T; setState: (value: any) => void }) => void;
 }
 interface ProviderState<T> {
 	value: Readonly<T>;
@@ -69,13 +70,13 @@ function assertProvider(provider: Provider) {
 
 // TODO: 选择
 // actions: {
-//   [x: string]: Reducer
+//   [x: string]: Reducer x
 // }
-// 或者
+// 或者 x
 // actions: {
 //   [x: string]: Effect
 // }
-// 或者
+// 或者 x
 // {
 //   reducers: {},
 //   effects: {}
@@ -288,6 +289,7 @@ export function createStore<
 		assertProvider(provider);
 
 		const connect = function (Component: React.ElementType) {
+			//TODO: 未完
 			return function WrappedComponent(props: {}) {
 				return (
 					<>
