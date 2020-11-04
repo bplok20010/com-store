@@ -2,25 +2,37 @@ import React from "react";
 
 import TodoStore from "./TodoStore";
 
+const Item = React.memo(function ({ id }: { id: number }) {
+	const { remove, update } = TodoStore.useActions();
+	const item = TodoStore.useSelector(state => state.items.find(item => item.id === id));
+
+	if (!item) return null;
+
+	return (
+		<div className="item">
+			<div className="title">
+				{item.id}. {item.title}
+			</div>
+			<div className="desc">
+				{item.desc} - [{item.seq} <button onClick={() => update(item.id)}>refresh</button>] --{" "}
+				{Date.now()}
+			</div>
+			<div className="remove" onClick={() => remove(item.id)}>
+				Remove
+			</div>
+		</div>
+	);
+});
+
 function List() {
-	const { remove } = TodoStore.useActions();
-	const items = [...TodoStore.useSelector(state => state.items)];
+	const items = TodoStore.useSelector(state => state.items);
 
 	return (
 		<>
+			<div>timestamp: {Date.now()}</div>
 			{items.length ? null : <div className="item">no data.</div>}
 			{items.map((item, i) => {
-				return (
-					<div key={i} className="item">
-						<div className="title">
-							{item.id}. {item.title}
-						</div>
-						<div className="desc">{item.desc}</div>
-						<div className="remove" onClick={() => remove(item.id)}>
-							Remove
-						</div>
-					</div>
-				);
+				return <Item key={item.id} id={item.id} />;
 			})}
 		</>
 	);
@@ -33,7 +45,7 @@ function AddBtn() {
 			<button
 				onClick={() =>
 					add({
-						title: "demo_" + Date.now(),
+						title: "item",
 						desc: "test",
 					})
 				}
