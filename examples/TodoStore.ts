@@ -8,6 +8,7 @@ export default createStore({
 		add(data: any) {
 			const { state, setState } = this;
 			setState({
+				ab: 1,
 				items: [...state.items, { id: Date.now(), seq: 1, ...data }],
 			});
 		},

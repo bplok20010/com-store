@@ -3,68 +3,65 @@ import invariant from "invariant";
 import withComponentHooks from "with-component-hooks";
 import shallowEqual from "./shallowEqual";
 
-// TODO: ts类型编写
-
 export const version = "%VERSION%";
 
 const ROOT_STATE = "__$$$ROOT_STATE_0eed#0$KLU%^1$$$___";
 
 //////////////////////////types//////////////////////////
 
-export interface IViewModel {
-	state: any;
-	actions?: {
-		[x: string]: (this: Store, ...args: any[]) => void;
-	};
-	models?: {
-		[name: string]: {
-			state: any;
-			actions?: {
-				[x: string]: (this: Store, ...args: any[]) => void;
-			};
-		};
-	};
+interface ViewModelCore {
+	state: Record<any, any> | (() => Record<any, any>);
+	actions: Record<string, (this: Store<any>, ...args: any[]) => any>;
 }
 
-export type Update<T = {}> = <K extends keyof T>(
-	state: ((prevState: Readonly<T>) => Pick<T, K> | T | null) | Pick<T, K> | T | null
+interface ViewModelInner<T extends ViewModelCore> {
+	state: T["state"];
+	actions?: T["actions"];
+}
+
+export interface IViewModel<T extends ViewModelCore = ViewModelCore> {
+	state: T["state"] extends () => any ? ReturnType<T["state"]> : T["state"];
+	actions?: T["actions"];
+	stores?: ViewModelInner<T>;
+}
+
+export type Subscriber<T extends IViewModel> = (
+	prevState: Readonly<ProviderState<T>>,
+	nextState: Readonly<ProviderState<T>>
 ) => void;
-export type Subscriber<T = {}> = (prevState: Readonly<T>, nextState: Readonly<T>) => void;
-export type UseSelector<T = {}> = <S extends (state: T) => any>(selector: S) => ReturnType<S>;
-export type UseProvider<T> = () => Provider<T>;
-export type Consumer<T = {}> = React.FC<ConsumerProps<T>>;
-export type Context<T> = React.Context<T>;
-export type ReducerAction = {
-	type: string;
-	[x: string]: any;
-};
-export type Reducer<T> = (state: T, action: ReducerAction) => T;
-export type Dispatch = (action: ReducerAction) => void;
-export type UseDispatch = () => Dispatch;
-export interface ConsumerProps<T = {}> {
+export type UseSelector<T extends IViewModel> = <S extends (state: T) => any>(
+	selector: S
+) => ReturnType<S>;
+export type UseProvider<T extends IViewModel> = () => Store<T>;
+export type Consumer<T extends IViewModel> = React.FC<ConsumerProps<T>>;
+export type Context<T extends IViewModel> = React.Context<ProviderState<T>>;
+
+export interface ConsumerProps<T extends IViewModel> {
 	children: (state: T) => React.ReactElement | null;
 }
 
-interface ProviderProps<T> {
-	initialValue?: T;
-	setup?: (opts: { state: T; setState: (value: any) => void }) => void;
-}
-interface ProviderState<T> {
-	// value: Readonly<T>;
+interface ProviderProps<T extends IViewModel> {
+	initialState?: GetStateType<T["state"]>;
+	setup?: (this: Store<T>) => void;
 }
 
-// ViewModelProvider
-export interface Provider<T = {}> extends React.Component<ProviderProps<T>, ProviderState<T>> {
+type ProviderState<T extends IViewModel> = GetStateType<T["state"]> &
+	{
+		[K in keyof T["state"]]: T["state"][K];
+	};
+
+export interface Store<T extends IViewModel> {
+	state: ProviderState<T>;
 	__$isProvider: boolean;
-	getSubscribeCount(): number;
 	subscribe(subscriber: Subscriber<T>): () => void;
-	getState(): T;
-	getActions(): any;
+	getState(): ProviderState<T>;
+	getActions(): T["actions"];
+	setState(data: T["state"], cb?: () => void): void;
 }
 
-export interface Store<T = {}> {
+export interface StoreContext<T extends IViewModel> {
 	Context: Context<T>;
-	Provider: new (props: {}) => Provider<T>;
+	Provider: React.ElementType<ProviderProps<T>>;
 	Consumer: Consumer<T>;
 	useStore: UseProvider<T>;
 	useSelector: UseSelector<T>;
@@ -72,9 +69,7 @@ export interface Store<T = {}> {
 	connect: any;
 }
 
-export interface ReducerStore<T = {}> extends Store<T> {
-	useDispatch: UseDispatch;
-}
+type GetStateType<T> = T extends () => any ? ReturnType<T> : T;
 
 export const withHooks = withComponentHooks as <T extends typeof React.Component>(
 	component: T
@@ -82,52 +77,11 @@ export const withHooks = withComponentHooks as <T extends typeof React.Component
 
 const errorMsg = "You may forget to use the <Store.Provider> package component";
 
-function assertProvider(provider: Provider) {
+function assertProvider(provider: any) {
 	invariant(provider.__$isProvider, errorMsg);
 }
 
-export type ActionCallback<T> = (
-	this: Store<T>,
-	value: any,
-	opt?: {
-		state: T;
-		setState: () => void;
-		actions: {};
-		dispatch: (name: string, value: any) => void;
-	}
-) => any;
-
-export interface StoreOptions<U extends ActionCallback<any>> {
-	namespace?: string;
-	actions?: U;
-}
-
-class ViewModel {
-	name: any;
-	get state() {
-		return this._provider.getState();
-	}
-	actions: any = {};
-
-	protected _provider: any;
-
-	constructor({ name, actions, provider }) {
-		this.name = name;
-		this._provider = provider;
-
-		if (actions) {
-			Object.keys(actions).forEach(name => {
-				this.actions[name] = actions[name].bind(this);
-			});
-		}
-	}
-
-	setState = (state, cb) => {
-		this._provider.setState(state, () => cb?.(this._provider.getState()));
-	};
-}
-
-function getInitialState(store) {
+function getInitialState<T extends IViewModel>(store: T): ProviderState<T> {
 	const state = typeof store.state === "function" ? store.state() : store.state;
 
 	const initialState = {
@@ -143,25 +97,69 @@ function getInitialState(store) {
 	return initialState;
 }
 
-export function createStore<
-	T extends Record<string | number | symbol, any>,
-	U extends ActionCallback<any>
->(store: IViewModel): Store<T> {
+class ViewModel {
+	name: string;
+	get state() {
+		return this._provider.getState();
+	}
+	actions: Record<string, (this: ViewModel, ...args: any[]) => any> = Object.create(null);
+
+	protected _provider: any;
+
+	constructor({
+		name,
+		actions,
+		provider,
+	}: {
+		name: string;
+		actions: Record<string, (this: ViewModel, ...args: any[]) => any>;
+		provider: {
+			getState: () => any;
+			setState: (state: any, cb: () => void) => void;
+		};
+	}) {
+		this.name = name;
+		this._provider = provider;
+
+		if (actions) {
+			Object.keys(actions).forEach(name => {
+				this.actions[name] = actions[name].bind(this);
+			});
+		}
+	}
+
+	setState = (state: any, cb: () => void) => {
+		this._provider.setState(state, cb);
+	};
+}
+
+export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
 	const initialState = getInitialState(store);
-	const StoreContext = React.createContext<Provider<T>>({
+	// TODO:
+	const StoreContext = React.createContext({
 		state: initialState,
-	} as Provider<T>);
-	const StateContext = React.createContext<T>(initialState as T);
+		getState: () => initialState,
+		setState() {},
+		getActions() {
+			return {};
+		},
+		subscribe() {
+			return function () {};
+		},
+		__$isProvider: false,
+	} as Store<T>);
+	const StateContext = React.createContext(initialState);
 
 	const Provider = class extends React.Component<ProviderProps<T>, ProviderState<T>> {
-		// static displayName = options.namespace;
-		store: ViewModel;
 		protected _listeners: Subscriber<T>[] = [];
 		__$isProvider = true;
 
-		state = getInitialState(store);
+		store: any;
+
+		state: ProviderState<T> = getInitialState(store);
 
 		componentDidMount() {
+			// TODO:
 			// this.props.setup?.(this.store);
 		}
 
@@ -170,8 +168,8 @@ export function createStore<
 
 			const actions = {};
 
-			if (store.models) {
-				Object.keys(store.models).forEach(name => {
+			if (store.stores) {
+				Object.keys(store.stores).forEach(name => {
 					const getState = () => this.getState()[name];
 					const setState = (state, cb) =>
 						this.setState(
@@ -184,7 +182,7 @@ export function createStore<
 							cb
 						);
 
-					const m = store.models![name];
+					const m = store.stores![name];
 					const subModel = new ViewModel({
 						name,
 						actions: m.actions,
@@ -220,10 +218,18 @@ export function createStore<
 		}
 
 		getState() {
-			return this.state;
+			return this.state as Readonly<ProviderState<T>>;
 		}
 
-		setState<K extends keyof T>(state: any, callback?: () => void) {
+		setState<K extends keyof ProviderState<T>>(
+			state:
+				| ((
+						prevState: Readonly<ProviderState<T>>,
+						props: Readonly<ProviderProps<T>>
+				  ) => Pick<ProviderState<T>, K> | ProviderState<T> | null)
+				| (Pick<ProviderState<T>, K> | ProviderState<T> | null),
+			callback?: () => void
+		) {
 			const prevState = this.getState();
 			super.setState(state, () => {
 				this._listeners.forEach(listener => {
@@ -251,7 +257,9 @@ export function createStore<
 		render() {
 			return (
 				<StateContext.Provider value={this.state}>
-					<StoreContext.Provider value={this}>{this.props.children}</StoreContext.Provider>
+					<StoreContext.Provider value={(this as unknown) as Store<T>}>
+						{this.props.children}
+					</StoreContext.Provider>
 				</StateContext.Provider>
 			);
 		}
@@ -267,7 +275,7 @@ export function createStore<
 
 		React.useEffect(() => {
 			return provider.subscribe((_, nextState) => {
-				setState(nextState);
+				setState(nextState as ProviderState<T>);
 			});
 		});
 
@@ -310,7 +318,7 @@ export function createStore<
 	// connect(mapStateToProps, mapActionToProps)(Component)
 	const connect = function (
 		mapStateToProps?: (state: T, props: any) => {},
-		mapActionToProps?: (actions: U, props: any) => {}
+		mapActionToProps?: (actions: any, props: any) => {}
 	) {
 		return function (Component: React.ElementType) {
 			return function WrappedComponent(props: any) {
