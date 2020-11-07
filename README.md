@@ -11,14 +11,13 @@ TODO:
 ```tsx
 import {createStore} from 'com-store';
 
-const Store = createStore({text: 'fax-store'}, {
+const Store = createStore( {
+  state: {
+    text: 'hello'
+  },
   actions: {
-    setText(text, {
-      state,
-      setState
-    }){
-      setState({
-        ...state,
+    setText(text){
+      this.setState({
         text
       })
     }
@@ -40,7 +39,8 @@ function App(){
 ```
 ---
 
-## `createStore(initialState: any, options: {
+## `createStore(vm: {
+  state: {}
   actions: {}
 }): Store;`
 
