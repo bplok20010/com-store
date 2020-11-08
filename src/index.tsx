@@ -2,74 +2,21 @@ import React from "react";
 import invariant from "invariant";
 import withComponentHooks from "with-component-hooks";
 import shallowEqual from "./shallowEqual";
+import {
+	StoreOptions,
+	ProviderState,
+	StoreContext,
+	Store,
+	ProviderProps,
+	Subscriber,
+	BaseStore,
+	Consumer,
+	UseStore,
+	UseActions,
+	UseSelector,
+} from "./types";
 
 export const version = "%VERSION%";
-
-const ROOT_STATE = "__$$$ROOT_STATE_0eed#0$KLU%^1$$$___";
-
-//////////////////////////types//////////////////////////
-
-interface ViewModelCore {
-	state: Record<any, any> | (() => Record<any, any>);
-	actions: Record<string, (this: Store<any>, ...args: any[]) => any>;
-}
-
-interface ViewModelInner<T extends ViewModelCore> {
-	state: T["state"];
-	actions?: T["actions"];
-}
-
-export interface IViewModel<T extends ViewModelCore = ViewModelCore> {
-	state: T["state"] extends () => any ? ReturnType<T["state"]> : T["state"];
-	actions?: T["actions"];
-	stores?: ViewModelInner<T>;
-}
-
-export type Subscriber<T extends IViewModel> = (
-	prevState: Readonly<ProviderState<T>>,
-	nextState: Readonly<ProviderState<T>>
-) => void;
-export type UseSelector<T extends IViewModel> = <S extends (state: T) => any>(
-	selector: S
-) => ReturnType<S>;
-export type UseProvider<T extends IViewModel> = () => Store<T>;
-export type Consumer<T extends IViewModel> = React.FC<ConsumerProps<T>>;
-export type Context<T extends IViewModel> = React.Context<ProviderState<T>>;
-
-export interface ConsumerProps<T extends IViewModel> {
-	children: (state: T) => React.ReactElement | null;
-}
-
-interface ProviderProps<T extends IViewModel> {
-	initialState?: GetStateType<T["state"]>;
-	setup?: (this: Store<T>) => void;
-}
-
-type ProviderState<T extends IViewModel> = GetStateType<T["state"]> &
-	{
-		[K in keyof T["state"]]: T["state"][K];
-	};
-
-export interface Store<T extends IViewModel> {
-	state: ProviderState<T>;
-	__$isProvider: boolean;
-	subscribe(subscriber: Subscriber<T>): () => void;
-	getState(): ProviderState<T>;
-	getActions(): T["actions"];
-	setState(data: T["state"], cb?: () => void): void;
-}
-
-export interface StoreContext<T extends IViewModel> {
-	Context: Context<T>;
-	Provider: React.ElementType<ProviderProps<T>>;
-	Consumer: Consumer<T>;
-	useStore: UseProvider<T>;
-	useSelector: UseSelector<T>;
-	useActions: any;
-	connect: any;
-}
-
-type GetStateType<T> = T extends () => any ? ReturnType<T> : T;
 
 export const withHooks = withComponentHooks as <T extends typeof React.Component>(
 	component: T
@@ -81,144 +28,77 @@ function assertProvider(provider: any) {
 	invariant(provider.__$isProvider, errorMsg);
 }
 
-function getInitialState<T extends IViewModel>(store: T): ProviderState<T> {
-	const state = typeof store.state === "function" ? store.state() : store.state;
-
-	const initialState = {
-		...state,
-	};
-
-	if (store.stores) {
-		Object.keys(store.stores).forEach(name => {
-			initialState[name] = store.stores![name].state;
-		});
-	}
-
-	return initialState;
+function getInitialState<T extends StoreOptions>(store: T): ProviderState<T> {
+	return typeof store.state === "function" ? store.state() : store.state;
 }
 
-class ViewModel {
-	name: string;
-	get state() {
-		return this._provider.getState();
-	}
-	actions: Record<string, (this: ViewModel, ...args: any[]) => any> = Object.create(null);
-
-	protected _provider: any;
-
-	constructor({
-		name,
-		actions,
-		provider,
-	}: {
-		name: string;
-		actions: Record<string, (this: ViewModel, ...args: any[]) => any>;
-		provider: {
-			getState: () => any;
-			setState: (state: any, cb: () => void) => void;
-		};
-	}) {
-		this.name = name;
-		this._provider = provider;
-
-		if (actions) {
-			Object.keys(actions).forEach(name => {
-				this.actions[name] = actions[name].bind(this);
-			});
-		}
-	}
-
-	setState = (state: any, cb: () => void) => {
-		this._provider.setState(state, cb);
-	};
-}
-
-export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
+export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 	const initialState = getInitialState(store);
-	// TODO:
-	const StoreContext = React.createContext({
+	const actions = store.actions || {};
+
+	const StoreContext = React.createContext<Store<T>>(({
+		...actions,
+		__$isProvider: false,
 		state: initialState,
-		getState: () => initialState,
-		setState() {},
-		getActions() {
-			return {};
+		setState() {
+			throw errorMsg;
 		},
 		subscribe() {
-			return function () {};
+			throw errorMsg;
 		},
-		__$isProvider: false,
-	} as Store<T>);
+	} as unknown) as Store<T>);
 	const StateContext = React.createContext(initialState);
+
+	function mapActions<A, S>(actions: A, store: S): A {
+		const bindActions = {} as A;
+
+		Object.keys(actions).forEach(name => {
+			bindActions[name] = actions[name].bind(store);
+		});
+
+		return bindActions;
+	}
 
 	const Provider = class extends React.Component<ProviderProps<T>, ProviderState<T>> {
 		protected _listeners: Subscriber<T>[] = [];
-		__$isProvider = true;
 
-		store: any;
+		store: Store<T>;
 
 		state: ProviderState<T> = getInitialState(store);
 
 		componentDidMount() {
-			// TODO:
-			// this.props.setup?.(this.store);
+			if (this.props.setup) {
+				this.props.setup.call(this.store, this.getState());
+			}
 		}
 
 		constructor(props: any) {
 			super(props);
+			const self = this;
 
-			const actions = {};
-
-			if (store.stores) {
-				Object.keys(store.stores).forEach(name => {
-					const getState = () => this.getState()[name];
-					const setState = (state, cb) =>
-						this.setState(
-							{
-								[name]: {
-									...getState(),
-									...state,
-								},
-							},
-							cb
-						);
-
-					const m = store.stores![name];
-					const subModel = new ViewModel({
-						name,
-						actions: m.actions,
-						provider: {
-							getState,
-							setState,
-						},
-					});
-
-					actions[name] = subModel.actions;
-				});
-			}
-
-			this.store = new ViewModel({
-				name: ROOT_STATE,
-				actions: {
-					...store.actions,
-					...actions,
+			const ctx: BaseStore<T> = {
+				get __$isProvider() {
+					return true;
 				},
-				provider: {
-					getState: this.getState.bind(this),
-					setState: this.setState.bind(this),
+				get state() {
+					return self.state;
 				},
-			});
-		}
+				get setState() {
+					return self.setState.bind(self);
+				},
+				get subscribe() {
+					return self.subscribe.bind(self);
+				},
+			};
 
-		getSubscribeCount() {
-			return this._listeners.length;
-		}
-
-		getActions() {
-			return this.store.actions;
+			this.store = {
+				...mapActions(actions, ctx),
+				...ctx,
+			} as Store<T>;
 		}
 
 		getState() {
-			return this.state as Readonly<ProviderState<T>>;
+			return this.state;
 		}
 
 		setState<K extends keyof ProviderState<T>>(
@@ -257,24 +137,19 @@ export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
 		render() {
 			return (
 				<StateContext.Provider value={this.state}>
-					<StoreContext.Provider value={(this as unknown) as Store<T>}>
-						{this.props.children}
-					</StoreContext.Provider>
+					<StoreContext.Provider value={this.store}>{this.props.children}</StoreContext.Provider>
 				</StateContext.Provider>
 			);
 		}
 	};
 
 	const Consumer: Consumer<T> = function (props) {
-		const provider = React.useContext(StoreContext);
-		assertProvider(provider);
-
-		const [state, setState] = React.useState(provider.getState());
-
-		assertProvider(provider);
+		const store = React.useContext(StoreContext);
+		assertProvider(store);
+		const [state, setState] = React.useState(store.state);
 
 		React.useEffect(() => {
-			return provider.subscribe((_, nextState) => {
+			return store.subscribe((_, nextState) => {
 				setState(nextState as ProviderState<T>);
 			});
 		});
@@ -282,22 +157,21 @@ export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
 		return props.children(state);
 	};
 
-	const useProvider: UseProvider<T> = function () {
-		const provider = React.useContext(StoreContext);
+	const useStore: UseStore<T> = function () {
+		const store = React.useContext(StoreContext);
+		assertProvider(store);
 
-		assertProvider(provider);
-
-		return provider;
+		return store;
 	};
 
 	const useSelector: UseSelector<T> = function useSelector(selector) {
-		const provider = React.useContext(StoreContext);
-		assertProvider(provider);
+		const store = React.useContext(StoreContext);
+		assertProvider(store);
 
-		const [state, setState] = React.useState(selector(provider.getState()));
+		const [state, setState] = React.useState(selector(store.state));
 
 		React.useEffect(() => {
-			return provider.subscribe((_, nextState) => {
+			return store.subscribe((_, nextState) => {
 				const newState = selector(nextState);
 				if (!shallowEqual(state, newState)) {
 					setState(newState);
@@ -308,32 +182,37 @@ export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
 		return state;
 	};
 
-	const useActions = function () {
-		const provider = React.useContext(StoreContext);
-		assertProvider(provider);
+	const useActions: UseActions<T> = function useActions() {
+		const actions = (React.useContext(StoreContext) as unknown) as T["actions"];
+		assertProvider(actions);
 
-		return provider.getActions();
+		return actions;
+	};
+
+	// TODO:
+	const useDispatch = function () {
+		const actions = useActions();
+		return function (name, ...args: any[]) {
+			return actions[name](...args);
+		};
 	};
 
 	// connect(mapStateToProps, mapActionToProps)(Component)
 	const connect = function (
-		mapStateToProps?: (state: T, props: any) => {},
-		mapActionToProps?: (actions: any, props: any) => {}
+		mapStateToProps?: (state: ProviderState<T>, props: any) => {},
+		mapActionToProps?: (actions: T["actions"], props: any) => {}
 	) {
 		return function (Component: React.ElementType) {
 			return function WrappedComponent(props: any) {
-				const provider = React.useContext(StoreContext);
-				assertProvider(provider);
+				const store = React.useContext(StoreContext);
+				assertProvider(store);
+				const actions = useActions();
 
 				const stateToProps = useSelector(state => mapStateToProps?.(state, props));
 
 				return (
 					<>
-						<Component
-							{...props}
-							{...stateToProps}
-							{...mapActionToProps?.(provider.getActions(), props)}
-						/>
+						<Component {...props} {...stateToProps} {...mapActionToProps?.(actions, props)} />
 					</>
 				);
 			};
@@ -344,7 +223,7 @@ export function createStore<T extends IViewModel>(store: T): StoreContext<T> {
 		Context: StateContext,
 		Provider,
 		Consumer,
-		useStore: useProvider,
+		useStore,
 		useSelector,
 		useActions,
 		connect,

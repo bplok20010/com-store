@@ -39,7 +39,7 @@ function App(){
 ```
 ---
 
-## `createStore(vm: {
+## `createStore(store: {
   state: {}
   actions: {}
 }): Store;`
@@ -52,7 +52,7 @@ function App(){
 ### `Provider`
 
 ```jsx
-<Store.Provider initialState={{name: 'com-store'}}>
+<Store.Provider>
     ...
 </Store.Provider>
 
@@ -97,20 +97,22 @@ function Info(){
 
 ```tsx
 const store = Store.useStore();
-store.getState();
+store.state;
 // or
 store.setState(...)
 ```
 
 ### useActions
 
-TODO: 
-
-### Context
-
-可直接通过React.useContext获取数据
-
-```tsx
-const state = React.useContext(Store.Context);
+```ts
+const {add} = Store.useActions();
 
 ```
+
+### connect
+
+```ts
+Store.connect(mapStateToProps, mapActionToProps)(Component)
+```
+
+TODO: 类型完善...

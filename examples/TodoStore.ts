@@ -2,11 +2,14 @@ import { createStore } from "../src";
 
 export default createStore({
 	state: {
+		a: 1,
+		b: "2",
 		items: [{ id: Date.now(), title: "item", desc: "test", seq: 1 }],
 	},
 	actions: {
-		add(data: any) {
+		add(data: {}) {
 			const { state, setState } = this;
+
 			setState({
 				ab: 1,
 				items: [...state.items, { id: Date.now(), seq: 1, ...data }],
