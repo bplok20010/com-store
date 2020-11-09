@@ -144,17 +144,17 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 	};
 
 	const Consumer: Consumer<T> = function (props) {
-		const store = React.useContext(StoreContext);
-		assertProvider(store);
-		const [state, setState] = React.useState(store.state);
+		// const store = React.useContext(StoreContext);
+		// assertProvider(store);
+		// const [state, setState] = React.useState(store.state);
 
-		React.useEffect(() => {
-			return store.subscribe((_, nextState) => {
-				setState(nextState as ProviderState<T>);
-			});
-		});
+		// React.useEffect(() => {
+		// 	return store.subscribe((_, nextState) => {
+		// 		setState(nextState as ProviderState<T>);
+		// 	});
+		// });
 
-		return props.children(state);
+		return props.children(React.useContext(StateContext));
 	};
 
 	const useStore: UseStore<T> = function () {
@@ -197,6 +197,13 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 		};
 	};
 
+	// TODO:
+	const useState = function () {
+		const store = React.useContext(StoreContext);
+		const state = React.useState(StateContext);
+		return [state, (newState: ProviderState<T>) => store.setState(newState)];
+	};
+
 	// connect(mapStateToProps, mapActionToProps)(Component)
 	const connect = function (
 		mapStateToProps?: (state: ProviderState<T>, props: any) => {},
@@ -226,6 +233,8 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 		useStore,
 		useSelector,
 		useActions,
+		useDispatch,
+		useState,
 		connect,
 	};
 }

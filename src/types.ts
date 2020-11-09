@@ -64,5 +64,7 @@ export interface StoreContext<T extends StoreOptions> {
 	useStore: UseStore<T>;
 	useSelector: UseSelector<T>;
 	useActions: UseActions<T>;
+	useDispatch: any;
+	useState: any;
 	connect: any;
 }
