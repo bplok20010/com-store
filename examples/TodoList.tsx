@@ -3,7 +3,9 @@ import React from "react";
 import TodoStore from "./TodoStore";
 
 const Item = React.memo(function ({ id }: { id: number }) {
-	const { remove, update } = TodoStore.useActions();
+	const store = TodoStore.useStore();
+	const remove = store.remove.bind(store);
+	const update = store.update.bind(store);
 	const item = TodoStore.useSelector(state => state.items.find(item => item.id === id));
 
 	if (!item) return null;
@@ -39,12 +41,12 @@ function List() {
 }
 
 function AddBtn() {
-	const { add } = TodoStore.useActions();
+	const store = TodoStore.useStore();
 	return (
 		<>
 			<button
 				onClick={() =>
-					add({
+					store.add({
 						title: "item",
 						desc: "test",
 					})

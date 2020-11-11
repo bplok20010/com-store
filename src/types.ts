@@ -12,10 +12,7 @@ export interface StoreOptions<T extends StoreOptionsBase = StoreOptionsBase> {
 	actions: Record<any, (...args: any[]) => any>;
 }
 
-export type Subscriber<T extends StoreOptions> = (
-	prevState: ProviderState<T>,
-	nextState: ProviderState<T>
-) => void;
+export type Subscriber<T> = (prevState: T, nextState: T) => void;
 export type UseSelector<T extends StoreOptions> = <
 	S extends (state: GetStateType<T["state"]>) => any
 >(

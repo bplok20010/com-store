@@ -2,6 +2,7 @@ import React from "react";
 import invariant from "invariant";
 import withComponentHooks from "with-component-hooks";
 import shallowEqual from "./shallowEqual";
+import Model from "./Model";
 import {
 	StoreOptions,
 	ProviderState,
@@ -25,46 +26,44 @@ export const withHooks = withComponentHooks as <T extends typeof React.Component
 const errorMsg = "You may forget to use the <Store.Provider> package component";
 
 function assertProvider(provider: any) {
-	invariant(provider.__$isProvider, errorMsg);
+	// invariant(provider.__$isProvider, errorMsg);
 }
 
 function getInitialState<T extends StoreOptions>(store: T): ProviderState<T> {
 	return typeof store.state === "function" ? store.state() : store.state;
 }
 
-export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
-	const initialState = getInitialState(store);
-	const actions = store.actions || {};
+type InitModel = typeof Model; //| typeof Model | Record<string, Model | typeof Model>;
 
-	const StoreContext = React.createContext<Store<T>>(({
-		...actions,
-		__$isProvider: false,
-		state: initialState,
-		setState() {
-			throw errorMsg;
-		},
-		subscribe() {
-			throw errorMsg;
-		},
-	} as unknown) as Store<T>);
-	const StateContext = React.createContext(initialState);
+export { Model };
 
-	function mapActions<A, S>(actions: A, store: S): A {
-		const bindActions = {} as A;
+export function createStore<T extends InitModel>(model: T) {
+	const defaultModel = new model();
+	defaultModel.state = model.getInitialState();
 
-		Object.keys(actions).forEach(name => {
-			bindActions[name] = actions[name].bind(store);
-		});
-
-		return bindActions;
-	}
+	const StoreContext = React.createContext(defaultModel);
+	const StateContext = React.createContext(defaultModel.state);
 
 	const Provider = class extends React.Component<ProviderProps<T>, ProviderState<T>> {
 		protected _listeners: Subscriber<T>[] = [];
 
-		store: Store<T>;
+		store: Model<any>;
 
-		state: ProviderState<T> = getInitialState(store);
+		constructor(props: any) {
+			super(props);
+
+			const store = new model();
+			store.state = model.getInitialState();
+
+			store.subscribe((prevState, nextState) => {
+				// TODO: check isInit
+				this.forceUpdate(() => {
+					this.notifyAll(prevState, nextState);
+				});
+			});
+
+			this.store = store;
+		}
 
 		componentDidMount() {
 			if (this.props.setup) {
@@ -72,33 +71,8 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 			}
 		}
 
-		constructor(props: any) {
-			super(props);
-			const self = this;
-
-			const ctx: BaseStore<T> = {
-				get __$isProvider() {
-					return true;
-				},
-				get state() {
-					return self.state;
-				},
-				get setState() {
-					return self.setState.bind(self);
-				},
-				get subscribe() {
-					return self.subscribe.bind(self);
-				},
-			};
-
-			this.store = {
-				...mapActions(actions, ctx),
-				...ctx,
-			} as Store<T>;
-		}
-
 		getState() {
-			return this.state;
+			return this.store.getState();
 		}
 
 		setState<K extends keyof ProviderState<T>>(
@@ -120,6 +94,12 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 			});
 		}
 
+		notifyAll(prevState, nextState) {
+			this._listeners.forEach(listener => {
+				listener(prevState, nextState);
+			});
+		}
+
 		subscribe(subscriber: Subscriber<T>): () => void {
 			this._listeners.push(subscriber);
 			return () => {
@@ -136,7 +116,7 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 
 		render() {
 			return (
-				<StateContext.Provider value={this.state}>
+				<StateContext.Provider value={this.getState()}>
 					<StoreContext.Provider value={this.store}>{this.props.children}</StoreContext.Provider>
 				</StateContext.Provider>
 			);
@@ -168,7 +148,7 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 		const store = React.useContext(StoreContext);
 		assertProvider(store);
 
-		const [state, setState] = React.useState(selector(store.state));
+		const [state, setState] = React.useState(selector(store.getState()));
 
 		React.useEffect(() => {
 			return store.subscribe((_, nextState) => {
@@ -183,10 +163,9 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 	};
 
 	const useActions: UseActions<T> = function useActions() {
-		const actions = (React.useContext(StoreContext) as unknown) as T["actions"];
-		assertProvider(actions);
+		const store = useStore();
 
-		return actions;
+		return store;
 	};
 
 	// TODO:
@@ -207,7 +186,7 @@ export function createStore<T extends StoreOptions>(store: T): StoreContext<T> {
 	// connect(mapStateToProps, mapActionToProps)(Component)
 	const connect = function (
 		mapStateToProps?: (state: ProviderState<T>, props: any) => {},
-		mapActionToProps?: (actions: T["actions"], props: any) => {}
+		mapActionToProps?: (actions: any, props: any) => {}
 	) {
 		return function (Component: React.ElementType) {
 			return function WrappedComponent(props: any) {
