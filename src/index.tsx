@@ -45,12 +45,14 @@ export function createStore<T extends InitModel>(model: T) {
 	const StateContext = React.createContext(defaultModel.state);
 
 	const Provider = class extends React.Component<ProviderProps<T>, ProviderState<T>> {
-		protected _listeners: Subscriber<T>[] = [];
+		protected _listeners: any[];
 
-		store: Model<any>;
+		protected store: InstanceType<T>;
 
 		constructor(props: any) {
 			super(props);
+
+			this._listeners = [];
 
 			const store = new model();
 			store.state = model.getInitialState();
@@ -62,7 +64,7 @@ export function createStore<T extends InitModel>(model: T) {
 				});
 			});
 
-			this.store = store;
+			this.store = store as InstanceType<T>;
 		}
 
 		componentDidMount() {
