@@ -29,22 +29,27 @@ function assertProvider(provider: any) {
 	// invariant(provider.__$isProvider, errorMsg);
 }
 
-function getInitialState<T extends StoreOptions>(store: T): ProviderState<T> {
-	return typeof store.state === "function" ? store.state() : store.state;
-}
+type InitModel = Model | typeof Model | Record<string, Model | typeof Model>; //| typeof Model | Record<string, Model | typeof Model>;
 
-type InitModel = typeof Model; //| typeof Model | Record<string, Model | typeof Model>;
+export { Model, createStore };
 
-export { Model };
+// function createStore<T extends Record<string, Model | typeof Model>>(model: T): any;
+function createStore<T extends Model>(model: T): any;
+function createStore<T extends typeof Model>(model: T): any {
+	let defaultModel: T extends typeof Model ? InstanceType<T> : T;
 
-export function createStore<T extends InitModel>(model: T) {
-	const defaultModel = new model();
-	defaultModel.state = model.getInitialState();
+	if (typeof model === "function") {
+		defaultModel = new model() as InstanceType<T>;
+	} else if (model instanceof Model) {
+		defaultModel = model;
+	}
+
+	// const defaultModel = model instanceof Model ? Model : new model();
 
 	const StoreContext = React.createContext(defaultModel);
-	const StateContext = React.createContext(defaultModel.state);
+	const StateContext = React.createContext(defaultModel.getState());
 
-	const Provider = class extends React.Component<ProviderProps<T>, ProviderState<T>> {
+	const Provider = class extends React.Component<ProviderProps> {
 		protected _listeners: any[];
 
 		protected store: InstanceType<T>;
@@ -55,7 +60,6 @@ export function createStore<T extends InitModel>(model: T) {
 			this._listeners = [];
 
 			const store = new model();
-			store.state = model.getInitialState();
 
 			store.subscribe((prevState, nextState) => {
 				// TODO: check isInit
@@ -75,25 +79,6 @@ export function createStore<T extends InitModel>(model: T) {
 
 		getState() {
 			return this.store.getState();
-		}
-
-		setState<K extends keyof ProviderState<T>>(
-			state:
-				| ((
-						prevState: Readonly<ProviderState<T>>,
-						props: Readonly<ProviderProps<T>>
-				  ) => Pick<ProviderState<T>, K> | ProviderState<T> | null)
-				| (Pick<ProviderState<T>, K> | ProviderState<T> | null),
-			callback?: () => void
-		) {
-			const prevState = this.getState();
-			super.setState(state, () => {
-				this._listeners.forEach(listener => {
-					listener(prevState, this.getState());
-				});
-
-				callback && callback();
-			});
 		}
 
 		notifyAll(prevState, nextState) {

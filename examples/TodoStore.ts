@@ -15,9 +15,7 @@ const data: {
 };
 
 class TestModel extends Model<typeof data> {
-	static getInitialState() {
-		return data;
-	}
+	state = data;
 	add(data: { id: number; title: string; desc: string; seq: number }) {
 		const { state } = this;
 

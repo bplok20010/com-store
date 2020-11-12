@@ -8,10 +8,6 @@ export interface ModelConfig<S extends State> {
 }
 
 export class Model<S extends State = {}> {
-	static getInitialState() {
-		return {};
-	}
-
 	state: S;
 	protected config: ModelConfig<S>;
 	protected _listeners: Subscriber<S>[];

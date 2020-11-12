@@ -1,3 +1,5 @@
+import Model from "./Model";
+
 type GetStateType<T> = T extends () => any ? ReturnType<T> : T;
 
 export interface StoreOptionsBase {
@@ -32,9 +34,8 @@ export interface ConsumerProps<T extends StoreOptions> {
 	children: (state: T) => React.ReactElement | null;
 }
 
-export interface ProviderProps<T extends StoreOptions> {
-	initialState?: GetStateType<T["state"]>;
-	setup?: (this: Store<T>) => void;
+export interface ProviderProps {
+	setup?: (this: Model) => void;
 }
 
 export type ProviderState<T extends StoreOptions> = GetStateType<T["state"]>;
