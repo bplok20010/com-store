@@ -1,26 +1,26 @@
 import { createStore, Model } from "../src";
 
-const data: {
+type Data = {
 	items: Array<{
 		id: number;
 		title: string;
 		desc: string;
 		seq: number;
 	}>;
-	[x: string]: any;
-} = {
+};
+
+const data = {
 	a: 1,
 	b: "2",
 	items: [{ id: Date.now(), title: "item", desc: "test", seq: 1 }],
 };
 
-class TestModel extends Model<typeof data> {
+class TestModel extends Model<Data> {
 	state = data;
 	add(data: { id: number; title: string; desc: string; seq: number }) {
 		const { state } = this;
 
 		this.setState({
-			ab: 1,
 			items: [...state.items, { id: Date.now(), seq: 1, ...data }],
 		});
 	}

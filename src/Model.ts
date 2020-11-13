@@ -1,18 +1,15 @@
 import { Subscriber } from "./types";
 
-type State = Record<any, any>;
-
-export interface ModelConfig<S extends State> {
+export interface ModelConfig {
 	// setState?: <K extends keyof S>(state: Pick<S, K> | S | null, cb?: (nextState: S) => void) => void;
 	// reducer?: (prevState: S, action?: any) => S;
 }
 
-export class Model<S extends State = {}> {
-	state: S;
-	protected config: ModelConfig<S>;
-	protected _listeners: Subscriber<S>[];
-	constructor(config: ModelConfig<S> = {}) {
-		this.state = {} as S;
+export class Model<S = any> {
+	state = {};
+	protected config: ModelConfig;
+	protected _listeners: Subscriber[];
+	constructor(config: ModelConfig = {}) {
 		this.config = config || {};
 		this._listeners = [];
 	}
@@ -35,7 +32,7 @@ export class Model<S extends State = {}> {
 		});
 	}
 
-	subscribe(subscriber: Subscriber<S>): () => void {
+	subscribe(subscriber: Subscriber): () => void {
 		this._listeners.push(subscriber);
 		return () => {
 			const idx = this._listeners.indexOf(subscriber);
